@@ -18,24 +18,52 @@ def geo2Cv(point, center_offset):
 # Method to get the center of the lens circle
 # Return the circle that inside the Region of Interest (ROI)
 # i.e. The %of the image from the center
-def getCircle(grayImg, outputImg, _h, _w, display=True, ROIpercent=0.5, radius_threshold=(210, 230), dp=1.2, minDist=100):
+def getCircle(grayImg, outputImg, _h=0.5, _w=0.5, display=True, ROIpercent=0.5, _radius_threshold=(0.3, 0.7), dp=1.2, minDist=100):
+
 
     # Get the height and width of the image
     h, w = grayImg.shape
 
+    ## Here the %
+    temph = h * _h
+    tempw = w * _w
+
+    #print(int(temph))
+    #print(int(tempw))
+
+
     _x, _y, _r = 0, 0, 0
 
-    center = [w//2, h//2]
+    #center = [w//2, h//2]
+    center = [int(tempw), int(temph)]
+
+    radius_threshold = [0,0]
+
+    radius_threshold[0] = int(round(_radius_threshold[0] * h, 1))
+    radius_threshold[1] = int(round(_radius_threshold[1] * h, 1))
+
+    print("T:",radius_threshold)
+
+
+
+    #print("Thresh:", radius_threshold)
 
     #geo_center = geo2Cv([-100,0],center)
     #print(geo_center)
     #cv2.circle(outputImg, (geo_center[0], geo_center[1]), 10, (255, 0, 0), 3)
 
-    ROI_radius = round(center[0]*ROIpercent)
+    # Calculate the required radius #
+    #ROI_radius = round(center[0]*ROIpercent)
+    ROI_radius = round((h//2) * ROIpercent)
     #circle_radius = []
 
+    ### Draw the constraint circle ###
     if display:
         cv2.circle(outputImg, (center[0], center[1]), ROI_radius, (255, 0, 0), 3)
+        # Maximum radius
+        cv2.circle(outputImg, (center[0], center[1]), radius_threshold[1], (235, 52, 158), 3)
+        # Minimum radius
+        cv2.circle(outputImg, (center[0], center[1]), radius_threshold[0], (197, 38, 222), 3)
 
     # detect circles in the image
     circles = cv2.HoughCircles(grayImg, cv2.HOUGH_GRADIENT, dp, minDist)
@@ -57,12 +85,13 @@ def getCircle(grayImg, outputImg, _h, _w, display=True, ROIpercent=0.5, radius_t
                     # draw the circle in the output image, then draw a rectangle
                     # corresponding to the center of the circle
                     cv2.circle(outputImg, (x, y), r, (0, 255, 0), 4)
+
                     cv2.rectangle(outputImg, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
                     _x, _y, _r = x, y, r
 
         # show the output image
-        if display:
-            cv2.imshow("ROI", outputImg)
+        #if display:
+        #    cv2.imshow("ROI", outputImg)
 
             #cv2.waitKey(0)
 
