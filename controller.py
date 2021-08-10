@@ -2,15 +2,35 @@ from PyQt5 import QtWidgets, QtGui
 from view import Ui_MainWindow
 from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtGui import QImage
+from PyQt5.Qt import QThreadPool,QRunnable, pyqtSlot
 import model
-import cv2, imutils
+import cv2
+import datetime
 
 import sys
+
+runable = False
+
+class myWorker(QRunnable):
+    @pyqtSlot()
+    def run(self):
+        ''' Your code of thread goes in this function
+        '''
+        global runable
+        print("Thread start")
+
+        while(runable):
+            try:
+                print("In the thread")
+            except:
+                print("An exception in thread occurred!")
+        print("Thread program stopped!")
 
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
+        self.threadpool = QThreadPool()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
@@ -23,6 +43,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.originalImg = None # Hold the temporary image
         self.middleImg = None
         self.resultImg = None
+        self.videoFlag = False
         self.xbar_now = 49
         self.ybar_now = 49
         self.rbar_now = 49
@@ -44,6 +65,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.pushButton_3.clicked.connect(self.startChecking)
         self.ui.pushButton_4.clicked.connect(self.stopChecking)
 
+        # Radio Buttons
+        self.ui.radioButton.clicked.connect(self.photoIsClicked)
+        self.ui.radioButton_2.clicked.connect(self.cameraIsClicked)
+
         # Sliders
         self.ui.horizontalSlider.valueChanged['int'].connect(self.set_xValue)
         self.ui.horizontalSlider_2.valueChanged['int'].connect(self.set_yValue)
@@ -56,27 +81,66 @@ class MainWindow(QtWidgets.QMainWindow):
         ### End of init function ###
 
     ### Added Code here ###
+    def photoIsClicked(self):
+        self.ui.pushButton_2.setEnabled(True)
+
+    def cameraIsClicked(self):
+        self.ui.pushButton_2.setEnabled(False)
+
     def debugLog(self, myString):
         self.ui.textBrowser.setText(myString)
         print(myString)
 
     def startChecking(self):
+        global runable
+        runable = True
         try:
-            self.run()
+            if self.ui.radioButton.isChecked():
+                self.ui.statusbar.showMessage("Image mode is used.")
+                print("Image mode is used.")
+                self.ui.radioButton.setEnabled(False)
+                self.ui.radioButton_2.setEnabled(False)
+                ### Detection Started ###
+                self.runDetection()
+
+            elif self.ui.radioButton_2.isChecked():
+                self.ui.statusbar.showMessage("Video mode is used.")
+                print("Video mode is used.")
+                self.ui.radioButton.setEnabled(False)
+                self.ui.radioButton_2.setEnabled(False)
+                ### Detection Started ###
+                if runable:
+                    # Start the thread
+                    worker = myWorker()
+                    self.threadpool.start(worker)
+
+
+            else:
+                self.ui.statusbar.showMessage("Error is choosing detection mode.")
+                print("Error in mode")
         except:
             self.debugLog("Error in reading file ...")
 
     def stopChecking(self):
-        pass
+        global runable
+        runable = False
+        self.ui.radioButton.setEnabled(True)
+        self.ui.radioButton_2.setEnabled(True)
+        self.ui.statusbar.showMessage("Stop detection.")
+        print("Stop detection")
 
     def loadImage(self):
         """ This function will load the user selected image
             and set it to label using setPhoto function.
         """
-        self.filename = QFileDialog.getOpenFileName(filter="Image (*.*)")[0]
-        self.originalImg = cv2.imread(self.filename)
-        self.ui.label_3.setText('Image loaded \nPlease press "Start" button for detection.')
-        self.debugLog('Image loaded ... ')
+        if self.ui.radioButton.isChecked():
+            #self.ui.pushButton_2.setEnabled(True)
+            self.filename = QFileDialog.getOpenFileName(filter="Image (*.*)")[0]
+            self.originalImg = cv2.imread(self.filename)
+            self.ui.label_3.setText('Image loaded \nPlease press "Start" button for detection.')
+            self.debugLog('Image loaded ... ')
+        else:
+            pass
 
 
     def formatImages(self, myImage, dim):
@@ -120,7 +184,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.label_5.setPixmap(QtGui.QPixmap.fromImage(_resultImage))
 
 
-    def run(self):
+    def runDetection(self):
         tempImg = self.originalImg.copy()
 
         self.middleImg, self.resultImg, self.totalPixels, self.sumOfArea, self.defect, = model.run(tempImg,
@@ -157,8 +221,16 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ui.label_10.setStyleSheet("background-color: orange; font: 75 12pt;")
 
     def savePhotos(self):
-        cv2.imwrite('output/originalImg.jpg', self.originalImg)
-        print("Image saved!")
+        try:
+            im_h = cv2.hconcat([self.originalImg, self.resultImg])
+            timestamp = datetime.datetime.today().strftime("%Y-%m-%d_%H%M")
+            filename = "output/result" + "_" + timestamp + ".jpg"
+            cv2.imwrite(filename, im_h)
+            self.ui.statusbar.showMessage("File saved in /" + filename)
+            print("Image saved! ", filename)
+        except:
+            print("Error in saving photos")
+            self.ui.statusbar.showMessage("Error in saving photos")
 
 
 
