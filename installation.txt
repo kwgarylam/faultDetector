@@ -1,6 +1,6 @@
 pip3 install PyQt5
 pip3 install pyqt5-tools
-pip3 pip install opencv-python
+pip3 install opencv-python
 pip3 install imutils
 
 Ref: https://clay-atlas.com/blog/2019/08/26/python-chinese-pyqt5-tutorial-install/
