@@ -3,44 +3,20 @@ from view import Ui_MainWindow
 from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtGui import QImage
 from PyQt5.Qt import QThreadPool,QRunnable, pyqtSlot
+from imutils.video import WebcamVideoStream
 import model
 import cv2
+import numpy as np
 import datetime
 
 import sys
 
 runable = False
-originalImg = None
-
-class myWorker(QRunnable):
-    @pyqtSlot()
-    def run(self):
-        ''' Your code of thread goes in this function
-        '''
-        global runable
-        print("Thread start")
-        video = cv2.VideoCapture(0)
-        print("runable?", runable)
-        while(runable):
-            try:
-                ### Main Function of the thread ###
-                #print("In the thread")
-                global originalImg
-                success, originalImg = video.read()
-                cv2.imshow('frame', originalImg)
-                cv2.waitKey(1)
-
-                #print("In the video")
-
-            except:
-                print("An exception in thread occurred!")
-        print("Thread program stopped!")
-
+#originalImg = None
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
-        self.threadpool = QThreadPool()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
@@ -50,19 +26,20 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Variables #
         self.filename = None # Hold the image address
-        #self.originalImg = None # Hold the temporary image
-        self.middleImg = None
-        self.resultImg = None
+        self.originalImg = np.zeros((640,480,3), dtype=np.uint8) # Hold the temporary image
+        self.middleImg = np.zeros((320,240,3), dtype=np.uint8)
+        self.resultImg = np.zeros((320,240,3), dtype=np.uint8)
         self.videoFlag = False
-        self.xbar_now = 49
-        self.ybar_now = 49
-        self.rbar_now = 49
-        self.thesh_min_bar_now = 29
-        self.thesh_max_bar_now = 69
+        self.xbar_now = 320
+        self.ybar_now = 240
+        self.rbar_now = 120
+        self.thesh_min_bar_now = 144
+        self.thesh_max_bar_now = 336
         self.totalPixels = 0
         self.sumOfArea = 0
         self.defect = 0
-        global originalImg
+        self.dim = [640,480]
+        #global originalImg
 
 
         # Added Code here #
@@ -92,6 +69,14 @@ class MainWindow(QtWidgets.QMainWindow):
         ### End of init function ###
 
     ### Added Code here ###
+    def runModel(self):
+        self.middleImg, self.resultImg, self.totalPixels, self.sumOfArea, self.defect, = model.run(self.originalImg,
+                                                                                                   self.rbar_now,
+                                                                                                   self.xbar_now,
+                                                                                                   self.ybar_now,
+                                                                                                   self.thesh_min_bar_now,
+                                                                                                   self.thesh_max_bar_now)
+
     def photoIsClicked(self):
         self.ui.pushButton_2.setEnabled(True)
 
@@ -104,7 +89,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def startChecking(self):
         global runable
+        #global originalImg
         runable = True
+        print("Start detection!")
         try:
             if self.ui.radioButton.isChecked():
                 self.ui.statusbar.showMessage("Image mode is used.")
@@ -112,7 +99,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.radioButton.setEnabled(False)
                 self.ui.radioButton_2.setEnabled(False)
                 ### Detection Started ###
-                self.runDetection()
+                self.runModel()
+                self.updateDetection()
 
             elif self.ui.radioButton_2.isChecked():
                 self.ui.statusbar.showMessage("Video mode is used.")
@@ -121,13 +109,18 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.radioButton_2.setEnabled(False)
 
                 ### Detection Started ###
-                if runable:
-                    # Start the thread
-                    worker = myWorker()
-                    self.threadpool.start(worker)
-                    while runable:
-                        self.runDetection()
+                vs = WebcamVideoStream(src=0).start()
 
+                while runable:
+
+                    try:
+                        self.originalImg = vs.read()
+                        self.runModel()
+                        self.updateDetection()
+
+                    except:
+                        print("Exception in graping video")
+                        pass
 
 
             else:
@@ -151,8 +144,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.ui.radioButton.isChecked():
             #self.ui.pushButton_2.setEnabled(True)
             self.filename = QFileDialog.getOpenFileName(filter="Image (*.*)")[0]
-            global originalImg
-            originalImg = cv2.imread(self.filename)
+            #global originalImg
+            self.originalImg = cv2.imread(self.filename)
             self.ui.label_3.setText('Image loaded \nPlease press "Start" button for detection.')
             self.debugLog('Image loaded ... ')
         else:
@@ -171,26 +164,36 @@ class MainWindow(QtWidgets.QMainWindow):
     def set_xValue(self, value):
         """ This function will set the x position of the constraint """
         self.xbar_now = value + 1
-        #print ("xbar: ", self.xbar_now)
+        self.xbar_now = round(self.xbar_now / 100, 1)
+        self.xbar_now = round(self.dim[0] * self.xbar_now, 1)
+        print ("xbar: ", self.xbar_now)
 
     def set_yValue(self, value):
         """ This function will set the y position of the constraint """
         self.ybar_now = value + 1
-        #print ("ybar: ", self.ybar_now)
+        self.ybar_now = self.ybar_now / 100
+        self.ybar_now = round(self.dim[1] * self.ybar_now, 1)
+        print ("ybar: ", self.ybar_now)
 
     def set_rValue(self, value):
         """ This function will set the r position of the constraint """
         self.rbar_now = value + 1
-        #print ("rbar: ", self.rbar_now)
+        self.rbar_now = self.rbar_now / 100
+        self.rbar_now = round((self.dim[1] // 2) * self.rbar_now)
+        print ("rbar: ", self.rbar_now)
 
     def set_thesh_min(self, value):
         """ This function will set the r position of the constraint """
         self.thesh_min_bar_now = value + 1
+        self.thesh_min_bar_now = self.thesh_min_bar_now / 100
+        self.thesh_min_bar_now = int(round(self.thesh_min_bar_now * self.dim[1], 1))
         print ("min bar: ", self.thesh_min_bar_now)
 
     def set_thesh_max(self, value):
         """ This function will set the r position of the constraint """
         self.thesh_max_bar_now = value + 1
+        self.thesh_max_bar_now = self.thesh_max_bar_now / 100
+        self.thesh_max_bar_now = int(round(self.thesh_max_bar_now * self.dim[1], 1))
         print ("max bar: ", self.thesh_max_bar_now)
 
     ### Updates ###
@@ -199,42 +202,45 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.label_4.setPixmap(QtGui.QPixmap.fromImage(_middleImage))
         self.ui.label_5.setPixmap(QtGui.QPixmap.fromImage(_resultImage))
 
+    def updateImageLabels(self, _mainImage, _middleImage):
+        self.ui.label_3.setPixmap(QtGui.QPixmap.fromImage(_mainImage))
+        self.ui.label_4.setPixmap(QtGui.QPixmap.fromImage(_middleImage))
 
-    def runDetection(self):
-        global originalImg
-        tempImg = originalImg.copy()
 
-        cv2.imshow('frame', originalImg)
-        cv2.waitKey(1)
-
-        self.middleImg, self.resultImg, self.totalPixels, self.sumOfArea, self.defect, = model.run(tempImg,
-                                                                                                   self.rbar_now,
-                                                                                                   self.xbar_now,
-                                                                                                   self.ybar_now,
-                                                                                                   self.thesh_min_bar_now,
-                                                                                                   self.thesh_max_bar_now)
-        #global originalImg
-        formatedMainImage = self.formatImages(originalImg, dim=(640, 480))
+    def updateDetection(self):
+        formatedMainImage = self.formatImages(self.originalImg, dim=(640, 480))
         formatedMiddleImage = self.formatImages(self.middleImg, dim=(320, 240))
-        formatedResultImg = self.formatImages(self.resultImg, dim=(320, 240))
 
-        self.updateAllImageLabels(formatedMainImage, formatedMiddleImage, formatedResultImg)
+        ############################################
+        if self.resultImg > 0:
+            formatedResultImg = self.formatImages(self.resultImg, dim=(320, 240))
+            self.updateAllImageLabels(formatedMainImage, formatedMiddleImage, formatedResultImg)
+        else:
+            self.updateImageLabels(formatedMainImage, formatedMiddleImage)
 
-        self.debugLog("Total pixel: " + str(self.totalPixels) + "\n" +
-                      "Sum of Area: " + str(self.sumOfArea) + "\n" +
-                      "Defect : " + str(self.defect) + "%")
-
+        ##################################################
+        
         self.checkResult()
+        cv2.waitKey(1)
 
 
     def checkResult(self):
-        if self.defect >= 0.5:
+        if self.defect >= 0.4:
             self.ui.label_10.setText('Fail!')
             self.ui.label_10.setStyleSheet("background-color: red; font: 75 12pt;")
             print("Fail!")
-        elif self.defect < 0.5 and self.defect >= 0:
+            self.debugLog("Total pixel: " + str(self.totalPixels) + "\n" +
+                          "Sum of Area: " + str(self.sumOfArea) + "\n" +
+                          "Defect : " + str(self.defect) + "%" + "\n" +
+                          "Fail!")
+
+        elif self.defect < 0.4 and self.defect > 0:
             self.ui.label_10.setText('Pass')
             self.ui.label_10.setStyleSheet("background-color: rgb(85, 255, 0); font: 75 12pt;")
+            self.debugLog("Total pixel: " + str(self.totalPixels) + "\n" +
+                          "Sum of Area: " + str(self.sumOfArea) + "\n" +
+                          "Defect : " + str(self.defect) + "%" + "\n" +
+                          "Pass!")
             print("Pass")
         else:
             self.ui.label_10.setText('Detecting')
@@ -242,8 +248,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def savePhotos(self):
         try:
-            global originalImg
-            im_h = cv2.hconcat([originalImg, self.resultImg])
+            #global originalImg
+            im_h = cv2.hconcat([self.originalImg, self.resultImg])
             timestamp = datetime.datetime.today().strftime("%Y-%m-%d_%H%M")
             filename = "output/result" + "_" + timestamp + ".jpg"
             cv2.imwrite(filename, im_h)
