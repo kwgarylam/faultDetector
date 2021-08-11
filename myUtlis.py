@@ -18,44 +18,13 @@ def geo2Cv(point, center_offset):
 # Method to get the center of the lens circle
 # Return the circle that inside the Region of Interest (ROI)
 # i.e. The %of the image from the center
-def getCircle(grayImg, outputImg, _h=0.5, _w=0.5, display=True, ROIpercent=0.5, _radius_threshold=(0.3, 0.7), dp=1.2, minDist=100):
-
-
-    # Get the height and width of the image
-    h, w = grayImg.shape
-
-    ## Here the %
-    temph = h * _h
-    tempw = w * _w
-
-    #print(int(temph))
-    #print(int(tempw))
-
+def getCircle(grayImg, outputImg, _h=240, _w=320, display=True, ROI_radius=120, _radius_threshold=(144,336), dp=1.2, minDist=100):
 
     _x, _y, _r = 0, 0, 0
 
-    #center = [w//2, h//2]
-    center = [int(tempw), int(temph)]
+    center = [_w, _h]
 
-    radius_threshold = [0,0]
-
-    radius_threshold[0] = int(round(_radius_threshold[0] * h, 1))
-    radius_threshold[1] = int(round(_radius_threshold[1] * h, 1))
-
-    print("T:",radius_threshold)
-
-
-
-    #print("Thresh:", radius_threshold)
-
-    #geo_center = geo2Cv([-100,0],center)
-    #print(geo_center)
-    #cv2.circle(outputImg, (geo_center[0], geo_center[1]), 10, (255, 0, 0), 3)
-
-    # Calculate the required radius #
-    #ROI_radius = round(center[0]*ROIpercent)
-    ROI_radius = round((h//2) * ROIpercent)
-    #circle_radius = []
+    radius_threshold = [_radius_threshold[0],_radius_threshold[1]]
 
     ### Draw the constraint circle ###
     if display:
