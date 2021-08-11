@@ -10,6 +10,7 @@ import datetime
 import sys
 
 runable = False
+originalImg = None
 
 class myWorker(QRunnable):
     @pyqtSlot()
@@ -18,10 +19,19 @@ class myWorker(QRunnable):
         '''
         global runable
         print("Thread start")
-
+        video = cv2.VideoCapture(0)
+        print("runable?", runable)
         while(runable):
             try:
-                print("In the thread")
+                ### Main Function of the thread ###
+                #print("In the thread")
+                global originalImg
+                success, originalImg = video.read()
+                cv2.imshow('frame', originalImg)
+                cv2.waitKey(1)
+
+                #print("In the video")
+
             except:
                 print("An exception in thread occurred!")
         print("Thread program stopped!")
@@ -40,7 +50,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Variables #
         self.filename = None # Hold the image address
-        self.originalImg = None # Hold the temporary image
+        #self.originalImg = None # Hold the temporary image
         self.middleImg = None
         self.resultImg = None
         self.videoFlag = False
@@ -52,6 +62,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.totalPixels = 0
         self.sumOfArea = 0
         self.defect = 0
+        global originalImg
 
 
         # Added Code here #
@@ -108,11 +119,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 print("Video mode is used.")
                 self.ui.radioButton.setEnabled(False)
                 self.ui.radioButton_2.setEnabled(False)
+
                 ### Detection Started ###
                 if runable:
                     # Start the thread
                     worker = myWorker()
                     self.threadpool.start(worker)
+                    while runable:
+                        self.runDetection()
+
 
 
             else:
@@ -136,7 +151,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.ui.radioButton.isChecked():
             #self.ui.pushButton_2.setEnabled(True)
             self.filename = QFileDialog.getOpenFileName(filter="Image (*.*)")[0]
-            self.originalImg = cv2.imread(self.filename)
+            global originalImg
+            originalImg = cv2.imread(self.filename)
             self.ui.label_3.setText('Image loaded \nPlease press "Start" button for detection.')
             self.debugLog('Image loaded ... ')
         else:
@@ -185,7 +201,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def runDetection(self):
-        tempImg = self.originalImg.copy()
+        global originalImg
+        tempImg = originalImg.copy()
+
+        cv2.imshow('frame', originalImg)
+        cv2.waitKey(1)
 
         self.middleImg, self.resultImg, self.totalPixels, self.sumOfArea, self.defect, = model.run(tempImg,
                                                                                                    self.rbar_now,
@@ -193,8 +213,8 @@ class MainWindow(QtWidgets.QMainWindow):
                                                                                                    self.ybar_now,
                                                                                                    self.thesh_min_bar_now,
                                                                                                    self.thesh_max_bar_now)
-
-        formatedMainImage = self.formatImages(self.originalImg, dim=(640, 480))
+        #global originalImg
+        formatedMainImage = self.formatImages(originalImg, dim=(640, 480))
         formatedMiddleImage = self.formatImages(self.middleImg, dim=(320, 240))
         formatedResultImg = self.formatImages(self.resultImg, dim=(320, 240))
 
@@ -222,7 +242,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def savePhotos(self):
         try:
-            im_h = cv2.hconcat([self.originalImg, self.resultImg])
+            global originalImg
+            im_h = cv2.hconcat([originalImg, self.resultImg])
             timestamp = datetime.datetime.today().strftime("%Y-%m-%d_%H%M")
             filename = "output/result" + "_" + timestamp + ".jpg"
             cv2.imwrite(filename, im_h)
