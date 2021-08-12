@@ -8,11 +8,12 @@ import model
 import cv2
 import numpy as np
 import datetime
-
+import time
 import sys
 
 runable = False
 #originalImg = None
+
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -39,6 +40,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sumOfArea = 0
         self.defect = 0
         self.dim = [640,480]
+        self.frame_rate = 1
+        self.prev = 0
+        self.temp = 0
         #global originalImg
 
 
@@ -92,6 +96,7 @@ class MainWindow(QtWidgets.QMainWindow):
         #global originalImg
         runable = True
         print("Start detection!")
+        
         try:
             if self.ui.radioButton.isChecked():
                 self.ui.statusbar.showMessage("Image mode is used.")
@@ -100,40 +105,67 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.radioButton_2.setEnabled(False)
                 ### Detection Started ###
                 self.runModel()
-                self.updateDetection()
+                #print("Defect ", self.defect)
+                #self.ui.label_3.setPixmap(QtGui.QPixmap("1.jpg"))
+                #cv2.waitKey(1)
 
+                self.updateDetection()
+                
             elif self.ui.radioButton_2.isChecked():
                 self.ui.statusbar.showMessage("Video mode is used.")
                 print("Video mode is used.")
                 self.ui.radioButton.setEnabled(False)
                 self.ui.radioButton_2.setEnabled(False)
+                self.ui.pushButton_3.setEnabled(False)
 
                 ### Detection Started ###
                 vs = WebcamVideoStream(src=0).start()
-
+                
                 while runable:
+ 
+                    # Reduce the refresh rate of the detection
+                    time_elapsed = time.time() - self.prev
+                    cv2.imshow('Control', self.temp)
 
                     try:
                         self.originalImg = vs.read()
-                        self.runModel()
-                        self.updateDetection()
+
+
+                        if time_elapsed > 1. / self.frame_rate:
+                            self.prev = time.time()
+                            self.runModel()
+                            self.updateDetection()
+                            
+                        else:
+                            self.updateMainLabels()
+                            
 
                     except:
                         print("Exception in graping video")
-                        pass
-
-
+                        
+                    finally:
+                        
+                        key = cv2.waitKey(50)
+                        if key & 0xFF == ord('q'):
+                            self.stopChecking()
+                            vs.stop()
+                            
+                        elif key & 0xFF == ord('s'):
+                            self.savePhotos()
+                        
+                        
             else:
                 self.ui.statusbar.showMessage("Error is choosing detection mode.")
                 print("Error in mode")
         except:
-            self.debugLog("Error in reading file ...")
+            self.debugLog("Error in checking image ...")
 
     def stopChecking(self):
         global runable
         runable = False
         self.ui.radioButton.setEnabled(True)
         self.ui.radioButton_2.setEnabled(True)
+        self.ui.pushButton_3.setEnabled(True)
         self.ui.statusbar.showMessage("Stop detection.")
         print("Stop detection")
 
@@ -148,6 +180,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.originalImg = cv2.imread(self.filename)
             self.ui.label_3.setText('Image loaded \nPlease press "Start" button for detection.')
             self.debugLog('Image loaded ... ')
+            #print(self.originalImg)
+            #cv2.imshow("Testing", self.originalImg)
+            #cv2.waitKey(1)
+
         else:
             pass
 
@@ -156,7 +192,10 @@ class MainWindow(QtWidgets.QMainWindow):
         """ This function will take image input and resize it. The image will be converted to QImage.
         """
         myImage = cv2.resize(myImage,(dim[0],dim[1]))
-        myImage = QImage(myImage, myImage.shape[1], myImage.shape[0], myImage.strides[0], QImage.Format_BGR888) #Pixmap format
+        
+        
+        myImage = QImage(myImage, myImage.shape[1], myImage.shape[0], myImage.strides[0], QImage.Format_RGB888) #Pixmap format
+        
         return myImage
 
 
@@ -164,15 +203,15 @@ class MainWindow(QtWidgets.QMainWindow):
     def set_xValue(self, value):
         """ This function will set the x position of the constraint """
         self.xbar_now = value + 1
-        self.xbar_now = round(self.xbar_now / 100, 1)
-        self.xbar_now = round(self.dim[0] * self.xbar_now, 1)
+        self.xbar_now = self.xbar_now / 100
+        self.xbar_now = int(round(self.dim[0] * self.xbar_now, 1))
         print ("xbar: ", self.xbar_now)
 
     def set_yValue(self, value):
         """ This function will set the y position of the constraint """
         self.ybar_now = value + 1
         self.ybar_now = self.ybar_now / 100
-        self.ybar_now = round(self.dim[1] * self.ybar_now, 1)
+        self.ybar_now = int(round(self.dim[1] * self.ybar_now, 1))
         print ("ybar: ", self.ybar_now)
 
     def set_rValue(self, value):
@@ -202,24 +241,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.label_4.setPixmap(QtGui.QPixmap.fromImage(_middleImage))
         self.ui.label_5.setPixmap(QtGui.QPixmap.fromImage(_resultImage))
 
-    def updateImageLabels(self, _mainImage, _middleImage):
-        self.ui.label_3.setPixmap(QtGui.QPixmap.fromImage(_mainImage))
-        self.ui.label_4.setPixmap(QtGui.QPixmap.fromImage(_middleImage))
+    def updateMainLabels(self):
+        formatedMainImage = self.formatImages(self.originalImg, dim=(640, 480))
+        self.ui.label_3.setPixmap(QtGui.QPixmap.fromImage(formatedMainImage))
+        cv2.waitKey(1)
 
 
     def updateDetection(self):
         formatedMainImage = self.formatImages(self.originalImg, dim=(640, 480))
         formatedMiddleImage = self.formatImages(self.middleImg, dim=(320, 240))
-
-        ############################################
-        if self.resultImg > 0:
-            formatedResultImg = self.formatImages(self.resultImg, dim=(320, 240))
-            self.updateAllImageLabels(formatedMainImage, formatedMiddleImage, formatedResultImg)
-        else:
-            self.updateImageLabels(formatedMainImage, formatedMiddleImage)
-
-        ##################################################
+        formatedResultImg = self.formatImages(self.resultImg, dim=(320, 240))
         
+
+        self.updateAllImageLabels(formatedMainImage, formatedMiddleImage, formatedResultImg)
         self.checkResult()
         cv2.waitKey(1)
 
@@ -249,7 +283,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def savePhotos(self):
         try:
             #global originalImg
-            im_h = cv2.hconcat([self.originalImg, self.resultImg])
+            try:
+                im_h = cv2.hconcat([self.originalImg, self.resultImg])
+            except:
+                im_h = self.originalImg
+                
             timestamp = datetime.datetime.today().strftime("%Y-%m-%d_%H%M")
             filename = "output/result" + "_" + timestamp + ".jpg"
             cv2.imwrite(filename, im_h)
