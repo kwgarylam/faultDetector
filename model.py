@@ -8,8 +8,10 @@ def run(img, ROI, x_value, y_value, min_value, max_value):
     width = 480
     dim = (height, width)
     r2 = 130
+    copyResultFlag = 0
 
     middleImg = np.zeros((320, 240, 3), dtype=np.uint8)
+
     resultImg = np.zeros((320, 240, 3), dtype=np.uint8)
 
 
@@ -21,7 +23,6 @@ def run(img, ROI, x_value, y_value, min_value, max_value):
         output = img.copy()
 
     try:
-        print("Inside the model")
         lower = np.array([0, 0, 0])
         upper = np.array([179, 100, 230])
         colorMasked = utlis.colorMasker(img, lower, upper, display=False)
@@ -32,6 +33,7 @@ def run(img, ROI, x_value, y_value, min_value, max_value):
         ret, thresh = cv2.threshold(midianBlur, 127, 255, cv2.THRESH_BINARY)
 
         x, y, r = utlis.getCircle(thresh, img, _h=y_value, _w=x_value, display=True, ROI_radius=ROI, _radius_threshold=(min_value, max_value))
+
         maskedLayer = utlis.cropROI(output, (x, y, r), (x, y, r2), display=False)
 
         ####
@@ -51,16 +53,17 @@ def run(img, ROI, x_value, y_value, min_value, max_value):
                 sumOfArea = sumOfArea + area
 
         defect = round((sumOfArea / totalPixels) * 100.0, 3)
-
         middleImg = img
         resultImg = output
+        oldResult = resultImg
 
 
 
     except:
-        print("Error Caught in filter")
+        print("No object detected in the model")
         middleImg = img
-        resultImg = 0
+        resultImg = oldResult
+        #resultImg = 0
         defect = -1
 
 
